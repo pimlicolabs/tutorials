@@ -1,0 +1,19 @@
+{
+  "name": "pimlico-tutorial-1",
+  "version": "1.0.0",
+  "description": "A repository containing the full code for tutorial 1 of the Pimlico documentation (https://docs.pimlico.io/tutorial/tutorial-1)",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "ts-node-esm index.ts"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@account-abstraction/contracts": "^0.6.0",
+    "@pimlico/erc20-paymaster": "^0.0.12",
+    "ethers": "^5.7.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  }
+}
