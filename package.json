@@ -1,11 +1,11 @@
 {
-  "name": "pimlico-tutorial-1",
+  "name": "pimlico-tutorials",
   "version": "1.0.0",
-  "description": "A repository containing the full code for tutorial 1 of the Pimlico documentation (https://docs.pimlico.io/tutorial/tutorial-1)",
+  "description": "A repository containing the full code for the Pimlico tutorials (https://docs.pimlico.io/tutorial)",
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "ts-node-esm index.ts"
+    "tutorial-1": "ts-node-esm tutorial-1.ts"
   },
   "author": "",
   "license": "MIT",

@@ -10,9 +10,6 @@ import { BigNumber, Wallet, constants, utils } from "ethers"
 import { ERC20, ERC20__factory } from "@pimlico/erc20-paymaster/contracts"
 import { getERC20Paymaster } from "@pimlico/erc20-paymaster"
 
-const apiKey = "YOUR_PIMLICO_API_KEY" // REPLACE THIS
-// You can get an API key by signing up at https://dashboard.pimlico.io
-
 // GENERATE THE INITCODE
 const SIMPLE_ACCOUNT_FACTORY_ADDRESS = "0x9406Cc6185a346906296840746125a0E44976454"
 const lineaProvider = new StaticJsonRpcProvider("https://rpc.goerli.linea.build/")
@@ -86,6 +83,7 @@ const userOperation = {
 
 // REQUEST PIMLICO VERIFYING PAYMASTER SPONSORSHIP
 const chain = "linea-testnet" // find the list of chain names on the Pimlico verifying paymaster reference page
+const apiKey = process.env.PIMLICO_API_KEY // REPLACE THIS
 
 const pimlicoEndpoint = `https://api.pimlico.io/v1/${chain}/rpc?apikey=${apiKey}`
 
