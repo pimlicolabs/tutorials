@@ -9,6 +9,8 @@ import { Provider, StaticJsonRpcProvider } from "@ethersproject/providers"
 import { BigNumber, Wallet, constants, utils } from "ethers"
 import { ERC20, ERC20__factory } from "@pimlico/erc20-paymaster/contracts"
 import { getERC20Paymaster } from "@pimlico/erc20-paymaster"
+import dotenv from 'dotenv'
+dotenv.config()
 
 // GENERATE THE INITCODE
 const SIMPLE_ACCOUNT_FACTORY_ADDRESS = "0x9406Cc6185a346906296840746125a0E44976454"
