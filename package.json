@@ -5,13 +5,14 @@
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "tutorial-1": "ts-node-esm tutorial-1.ts"
+    "tutorial-1": "ts-node-esm tutorial-1.ts",
+    "tutorial-2": "ts-node-esm tutorial-2.ts"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@account-abstraction/contracts": "^0.6.0",
-    "@pimlico/erc20-paymaster": "^0.0.12",
+    "@pimlico/erc20-paymaster": "^0.1.0",
     "dotenv": "^16.3.1",
     "ethers": "^5.7.2",
     "ts-node": "^10.9.1",
