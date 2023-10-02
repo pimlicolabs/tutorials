@@ -1,4 +1,4 @@
-import { GetUserOperationReceiptReturnType, UserOperation, bundlerActions, getUserOperationHash } from "permissionless"
+import { GetUserOperationReceiptReturnType, UserOperation, bundlerActions, getSenderAddress, getUserOperationHash } from "permissionless"
 import { Address, Hex, concat, createClient, createPublicClient, encodeFunctionData, http } from "viem"
 import { lineaTestnet } from "viem/chains"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
@@ -53,27 +53,10 @@ console.log("Generated initCode:", initCode)
 // CALCULATE THE SENDER ADDRESS
 const ENTRY_POINT_ADDRESS = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 
-const senderAddress = await publicClient.simulateContract({
-  address: ENTRY_POINT_ADDRESS,
-  abi: [{ inputs: [{ name: "initCode", type: "bytes" }],
-		name: "getSenderAddress",
-		outputs: [],
-		stateMutability: "nonpayable",
-		type: "function",
-	}, 
-  {
-		inputs: [{ name: "sender", type: "address" }],
-		name: "SenderAddressResult",
-		type: "error",
-	}],
-  functionName: "getSenderAddress",
-  args: [initCode],
-  account: owner,
-}).then(() => { throw new Error("Expected getSenderAddress() to revert") })
-.catch((e: any) => {
-  return e.cause.data.args[0] as Address
+const senderAddress = await getSenderAddress(publicClient, {
+  initCode,
+  entryPoint: ENTRY_POINT_ADDRESS
 })
-
 console.log("Calculated sender address:", senderAddress)
 
 // GENERATE THE CALLDATA
