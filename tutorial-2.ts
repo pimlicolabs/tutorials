@@ -3,7 +3,7 @@ import { getAccountNonce } from "permissionless"
 import { UserOperation, bundlerActions, getSenderAddress, getUserOperationHash } from "permissionless"
 import { pimlicoBundlerActions, pimlicoPaymasterActions } from "permissionless/actions/pimlico"
 import { Address, Hash, concat, createClient, createPublicClient, encodeFunctionData, http } from "viem"
-import { generatePrivateKey, privateKeyToAccount, signMessage } from "viem/accounts"
+import { privateKeyToAccount, signMessage } from "viem/accounts"
 import { polygonMumbai } from "viem/chains"
 dotenv.config()
 
@@ -124,18 +124,10 @@ const submitUserOperation = async (userOperation: UserOperation) => {
     console.log(`UserOperation submitted. Hash: ${userOperationHash}`)
 
     console.log("Querying for receipts...")
-    let receipt = null
-    while (receipt === null) {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        receipt = await bundlerClient.getUserOperationReceipt({
-            hash: userOperationHash
-        })
-        console.log(
-            receipt === null
-                ? "Receipt not found..."
-                : `Receipt found!\nTransaction hash: ${receipt.receipt.transactionHash}`
-        )
-    }
+    const receipt = await bundlerClient.waitForUserOperationReceipt({
+        hash: userOperationHash
+    })
+    console.log(`Receipt found!\nTransaction hash: ${receipt.receipt.transactionHash}`)
 }
 
 // You can get the paymaster addresses from https://docs.pimlico.io/reference/erc20-paymaster/contracts
@@ -184,7 +176,7 @@ const userOperation: Partial<UserOperation> = {
 
 const nonce = await getAccountNonce(publicClient, {
     entryPoint: ENTRY_POINT_ADDRESS,
-    address: senderAddress
+    sender: senderAddress
 })
 
 if (nonce === 0n) {
@@ -248,7 +240,7 @@ console.log("Sponsoring a user operation with the ERC-20 paymaster...")
 
 const newNonce = await getAccountNonce(publicClient, {
     entryPoint: ENTRY_POINT_ADDRESS,
-    address: senderAddress
+    sender: senderAddress
 })
 
 const sponsoredUserOperation: UserOperation = {
