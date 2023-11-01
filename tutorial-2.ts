@@ -1,9 +1,14 @@
 import dotenv from "dotenv"
-import { getAccountNonce } from "permissionless"
-import { UserOperation, bundlerActions, getSenderAddress, getUserOperationHash } from "permissionless"
+import {
+    UserOperation,
+    bundlerActions,
+    getAccountNonce,
+    getSenderAddress,
+    signUserOperationHashWithECDSA
+} from "permissionless"
 import { pimlicoBundlerActions, pimlicoPaymasterActions } from "permissionless/actions/pimlico"
 import { Address, Hash, concat, createClient, createPublicClient, encodeFunctionData, http } from "viem"
-import { privateKeyToAccount, signMessage } from "viem/accounts"
+import { privateKeyToAccount } from "viem/accounts"
 import { polygonMumbai } from "viem/chains"
 dotenv.config()
 
@@ -192,15 +197,11 @@ if (nonce === 0n) {
     userOperation.paymasterAndData = result.paymasterAndData
 
     // SIGN THE USEROPERATION
-    const signature = await signMessage({
-        message: {
-            raw: getUserOperationHash({
-                userOperation: userOperation as UserOperation,
-                entryPoint: ENTRY_POINT_ADDRESS,
-                chainId: polygonMumbai.id
-            })
-        },
-        privateKey: privateKey as Hash
+    const signature = await signUserOperationHashWithECDSA({
+        account: signer,
+        userOperation: userOperation as UserOperation,
+        chainId: polygonMumbai.id,
+        entryPoint: ENTRY_POINT_ADDRESS
     })
 
     userOperation.signature = signature
@@ -259,15 +260,11 @@ const sponsoredUserOperation: UserOperation = {
 
 // SIGN THE USEROPERATION
 
-sponsoredUserOperation.signature = await signMessage({
-    message: {
-        raw: getUserOperationHash({
-            userOperation: sponsoredUserOperation,
-            entryPoint: ENTRY_POINT_ADDRESS,
-            chainId: polygonMumbai.id
-        })
-    },
-    privateKey: privateKey as Hash
+sponsoredUserOperation.signature = await signUserOperationHashWithECDSA({
+    account: signer,
+    userOperation: sponsoredUserOperation,
+    chainId: polygonMumbai.id,
+    entryPoint: ENTRY_POINT_ADDRESS
 })
 
 await submitUserOperation(sponsoredUserOperation)

@@ -1,9 +1,9 @@
-import { UserOperation, bundlerActions, getSenderAddress, getUserOperationHash } from "permissionless"
-import { Hex, concat, createClient, createPublicClient, encodeFunctionData, http } from "viem"
-import { lineaTestnet } from "viem/chains"
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
-import { pimlicoBundlerActions, pimlicoPaymasterActions } from "permissionless/actions/pimlico"
 import dotenv from "dotenv"
+import { UserOperation, bundlerActions, getSenderAddress, signUserOperationHashWithECDSA } from "permissionless"
+import { pimlicoBundlerActions, pimlicoPaymasterActions } from "permissionless/actions/pimlico"
+import { Hex, concat, createClient, createPublicClient, encodeFunctionData, http } from "viem"
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
+import { lineaTestnet } from "viem/chains"
 dotenv.config()
 
 // CREATE THE CLIENTS
@@ -122,14 +122,11 @@ const sponsoredUserOperation: UserOperation = {
 console.log("Received paymaster sponsor result:", sponsorUserOperationResult)
 
 // SIGN THE USER OPERATION
-const signature = await owner.signMessage({
-    message: {
-        raw: getUserOperationHash({
-            userOperation: sponsoredUserOperation,
-            chainId: lineaTestnet.id,
-            entryPoint: ENTRY_POINT_ADDRESS
-        })
-    }
+const signature = await signUserOperationHashWithECDSA({
+    account: owner,
+    userOperation: sponsoredUserOperation,
+    chainId: lineaTestnet.id,
+    entryPoint: ENTRY_POINT_ADDRESS
 })
 sponsoredUserOperation.signature = signature
 
