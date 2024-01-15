@@ -1,18 +1,19 @@
 {
   "name": "pimlico-tutorials",
   "version": "1.0.0",
-  "description": "A repository containing the full code for the Pimlico tutorials (https://docs.pimlico.io/tutorial)",
+  "description": "A repository containing the full code for the Pimlico tutorials (https://docs.pimlico.io/permissionless)",
   "main": "index.ts",
   "type": "module",
   "scripts": {
     "tutorial-1": "tsx tutorial-1.ts",
-    "tutorial-2": "tsx tutorial-2.ts"
+    "tutorial-2": "tsx tutorial-2.ts",
+    "tutorial-3": "tsx tutorial-3.ts"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.3.1",
-    "permissionless": "^0.0.22",
+    "permissionless": "^0.0.27",
     "viem": "^2.0.0"
   },
   "devDependencies": {
