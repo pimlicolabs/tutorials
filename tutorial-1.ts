@@ -1,13 +1,13 @@
 import "dotenv/config"
 import { writeFileSync } from "fs"
 import { ENTRYPOINT_ADDRESS_V07, createSmartAccountClient } from "permissionless"
-import { privateKeyToSimpleSmartAccount } from "permissionless/accounts"
+import { signerToSafeSmartAccount } from "permissionless/accounts"
 import {
 	createPimlicoBundlerClient,
 	createPimlicoPaymasterClient,
 } from "permissionless/clients/pimlico"
 import { Hex, createPublicClient, http } from "viem"
-import { generatePrivateKey } from "viem/accounts"
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 
 const apiKey = process.env.PIMLICO_API_KEY
@@ -31,10 +31,10 @@ export const paymasterClient = createPimlicoPaymasterClient({
 	entryPoint: ENTRYPOINT_ADDRESS_V07,
 })
 
-const account = await privateKeyToSimpleSmartAccount(publicClient, {
-	privateKey,
+const account = await signerToSafeSmartAccount(publicClient, {
+	signer: privateKeyToAccount(privateKey),
 	entryPoint: ENTRYPOINT_ADDRESS_V07, // global entrypoint
-	factoryAddress: "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985",
+	safeVersion: "1.4.1",
 })
 
 console.log(`Smart account address: https://sepolia.etherscan.io/address/${account.address}`)
