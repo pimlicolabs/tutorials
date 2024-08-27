@@ -3,12 +3,10 @@ import { writeFileSync } from "fs"
 import { createSmartAccountClient } from "permissionless"
 import { toSafeSmartAccount } from "permissionless/accounts"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
-import { Hex, createClient, createPublicClient, encodeFunctionData, http, parseAbiItem } from "viem"
-import { GetPaymasterDataParameters } from "viem/account-abstraction/actions/paymaster/getPaymasterData"
+import { Hex, createPublicClient, encodeFunctionData, http, parseAbiItem } from "viem"
 import { entryPoint07Address } from "viem/account-abstraction"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
-import { GetPaymasterStubDataParameters } from "viem/account-abstraction/actions/paymaster/getPaymasterStubData"
 
 const erc20PaymasterAddress = "0x000000000041F3aFe8892B48D88b6862efe0ec8d" as const
 const usdcAddress = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
@@ -27,10 +25,10 @@ const publicClient = createPublicClient({
 })
 
 const apiKey = process.env.PIMLICO_API_KEY // REPLACE THIS
-const bundlerUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
+const pimlicoUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
 
-const bundlerClient = createPimlicoClient({
-	transport: http(bundlerUrl),
+const pimlicoClient = createPimlicoClient({
+	transport: http(pimlicoUrl),
 	entryPoint: {
 		address: entryPoint07Address,
 		version: "0.7",
@@ -75,49 +73,40 @@ if (senderUsdcBalance < 1_000_000n) {
 
 console.log(`Smart account USDC balance: ${Number(senderUsdcBalance) / 1000000} USDC`)
 
-const erc20Paymaster = createClient({
-	transport: http(bundlerUrl),
-}).extend((_) => ({
-	getPaymasterData: async (
-		parameters: GetPaymasterDataParameters,
-	  ) => {
-		const gasEstimates = await bundlerClient.estimateUserOperationGas({
-			...parameters,
-			paymaster: erc20PaymasterAddress,
-		})
-		return {
-			paymaster: erc20PaymasterAddress,
-			paymasterData: "0x" as Hex,
-			paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
-			paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n,
-		}
-	  },
-	  getPaymasterStubData: async (
-		parameters: GetPaymasterStubDataParameters,
-	  ) => {
-		const gasEstimates = await bundlerClient.estimateUserOperationGas({
-			...parameters,
-			paymaster: erc20PaymasterAddress
-		})
-		
-		return {
-			paymaster: erc20PaymasterAddress,
-			paymasterData: "0x" as Hex,
-			paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
-			paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n
-		}
-	}
-}))
-
 const smartAccountClient = createSmartAccountClient({
 	client: publicClient,
 	account,
 	chain: sepolia,
-	transport: http(bundlerUrl),
-	paymaster: erc20Paymaster,
+	transport: http(pimlicoUrl),
+	paymaster: {
+		async getPaymasterData(parameters) {
+			const gasEstimates = await pimlicoClient.estimateUserOperationGas({
+				...parameters,
+				paymaster: erc20PaymasterAddress,
+			})
+			return {
+				paymaster: erc20PaymasterAddress,
+				paymasterData: "0x" as Hex,
+				paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
+				paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n,
+			}
+		},
+		async getPaymasterStubData(parameters) {
+			const gasEstimates = await pimlicoClient.estimateUserOperationGas({
+				...parameters,
+				paymaster: erc20PaymasterAddress
+			})
+			return {
+				paymaster: erc20PaymasterAddress,
+				paymasterData: "0x" as Hex,
+				paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
+				paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n
+			}
+		}
+	},
 	userOperation: {
 		estimateFeesPerGas: async () => {
-			return (await bundlerClient.getUserOperationGasPrice()).fast
+			return (await pimlicoClient.getUserOperationGasPrice()).fast
 		},
 	}
 })

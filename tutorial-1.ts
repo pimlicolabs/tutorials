@@ -9,7 +9,6 @@ import { createBundlerClient, createPaymasterClient, entryPoint07Address } from 
 
 const apiKey = process.env.PIMLICO_API_KEY
 if (!apiKey) throw new Error("Missing PIMLICO_API_KEY")
-const paymasterUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
 
 const privateKey =
 	(process.env.PRIVATE_KEY as Hex) ??
@@ -22,10 +21,6 @@ const privateKey =
 export const publicClient = createPublicClient({
 	chain: sepolia,
 	transport: http("https://rpc.ankr.com/eth_sepolia"),
-})
-
-export const paymasterClient = createPaymasterClient({
-	transport: http(paymasterUrl),
 })
 
 const account = await toSafeSmartAccount({
@@ -44,10 +39,10 @@ console.log({
 
 console.log(`Smart account address: https://sepolia.etherscan.io/address/${account.address}`)
 
-const bundlerUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
+const pimlicoUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
 
-const bundlerClient = createPimlicoClient({
-	transport: http(bundlerUrl),
+const pimlicoClient = createPimlicoClient({
+	transport: http(pimlicoUrl),
 	entryPoint: {
 		address: entryPoint07Address,
 		version: "0.7",
@@ -57,11 +52,11 @@ const bundlerClient = createPimlicoClient({
 const smartAccountClient = createBundlerClient({
 	account,
 	chain: sepolia,
-	transport: http(bundlerUrl),
-	paymaster: paymasterClient,
+	transport: http(pimlicoUrl),
+	paymaster: pimlicoClient,
 	userOperation: {
 		estimateFeesPerGas: async () => {
-			return (await bundlerClient.getUserOperationGasPrice()).fast
+			return (await pimlicoClient.getUserOperationGasPrice()).fast
 		},
 	}
 })
