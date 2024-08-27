@@ -5,7 +5,8 @@ import { Hex, createPublicClient, http } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
-import { createBundlerClient, createPaymasterClient, entryPoint07Address } from "viem/account-abstraction"
+import { createPaymasterClient, entryPoint07Address } from "viem/account-abstraction"
+import { createSmartAccountClient } from "permissionless"
 
 const apiKey = process.env.PIMLICO_API_KEY
 if (!apiKey) throw new Error("Missing PIMLICO_API_KEY")
@@ -54,7 +55,7 @@ const bundlerClient = createPimlicoClient({
 	}
 })
 
-const smartAccountClient = createBundlerClient({
+const smartAccountClient = createSmartAccountClient({
 	account,
 	chain: sepolia,
 	transport: http(bundlerUrl),
@@ -66,14 +67,10 @@ const smartAccountClient = createBundlerClient({
 	}
 })
 
-const userOpHash = await smartAccountClient.sendUserOperation({
-	calls: [{
-		to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-		value: 0n,
-		data: "0x1234",
-	}]
+const txHash = await smartAccountClient.sendTransaction({
+	to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+	value: 0n,
+	data: "0x1234",
 })
 
-const receipt = await smartAccountClient.waitForUserOperationReceipt({hash:userOpHash})
-
-console.log(`User operation included: https://sepolia.etherscan.io/tx/${receipt.receipt.transactionHash}`)
+console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHash}`)
