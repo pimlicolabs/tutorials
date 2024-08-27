@@ -1,13 +1,8 @@
 import "dotenv/config"
-import {
-    ENTRYPOINT_ADDRESS_V07,
-    UserOperation,
-    bundlerActions,
-    getSenderAddress,
-    signUserOperationHashWithECDSA,
-} from "permissionless"
-import { pimlicoBundlerActions, pimlicoPaymasterActions } from "permissionless/actions/pimlico"
+import { pimlicoActions } from "permissionless/actions/pimlico"
+import { getSenderAddress } from "permissionless/actions"
 import { Address, Hex, createClient, createPublicClient, encodeFunctionData, http } from "viem"
+import { bundlerActions, createPaymasterClient, entryPoint07Address, getUserOperationHash, UserOperation } from "viem/account-abstraction"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 
@@ -23,13 +18,17 @@ const bundlerClient = createClient({
 	transport: http(endpointUrl),
 	chain: sepolia,
 })
-	.extend(bundlerActions(ENTRYPOINT_ADDRESS_V07))
-	.extend(pimlicoBundlerActions(ENTRYPOINT_ADDRESS_V07))
+	.extend(bundlerActions)
+	.extend(pimlicoActions({
+		entryPoint: {
+			address: entryPoint07Address,
+			version: "0.7"
+		}
+	}))
 
-const paymasterClient = createClient({
+const paymasterClient = createPaymasterClient({
 	transport: http(endpointUrl),
-	chain: sepolia,
-}).extend(pimlicoPaymasterActions(ENTRYPOINT_ADDRESS_V07))
+})
 
 const SIMPLE_ACCOUNT_FACTORY_ADDRESS = "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985"
 
@@ -60,7 +59,7 @@ console.log("Generated factoryData:", factoryData)
 const senderAddress = await getSenderAddress(publicClient, {
 	factory,
 	factoryData,
-	entryPoint: ENTRYPOINT_ADDRESS_V07,
+	entryPointAddress: entryPoint07Address,
 })
 console.log("Calculated sender address:", senderAddress)
 
@@ -97,34 +96,73 @@ const userOperation = {
 	callData,
 	maxFeePerGas: gasPrice.fast.maxFeePerGas,
 	maxPriorityFeePerGas: gasPrice.fast.maxPriorityFeePerGas,
+	callGasLimit: 0n,
+	preVerificationGas: 0n,
+	verificationGasLimit: 0n,
 	// dummy signature, needs to be there so the SimpleAccount doesn't immediately revert because of invalid signature length
 	signature:
 		"0xa15569dd8f8324dbeabf8073fdec36d4b754f53ce5901e283c6de79af177dc94557fa3c9922cd7af2a96ca94402d35c39f266925ee6407aeb32b31d76978d4ba1c" as Hex,
+		
 }
 
-const sponsorUserOperationResult = await paymasterClient.sponsorUserOperation({
-	userOperation,
+const estimationResult = await bundlerClient.estimateUserOperationGas({
+	...userOperation,
+	entryPointAddress: entryPoint07Address,
 })
 
-const sponsoredUserOperation: UserOperation<"v0.7"> = {
+userOperation.callGasLimit = estimationResult.callGasLimit
+userOperation.preVerificationGas = estimationResult.preVerificationGas
+userOperation.verificationGasLimit = estimationResult.verificationGasLimit
+
+
+const sponsorUserOperationResult = await paymasterClient.getPaymasterData({
 	...userOperation,
-	...sponsorUserOperationResult,
+	chainId: sepolia.id,
+	entryPointAddress: entryPoint07Address,
+})
+
+console.log({
+	sponsorUserOperationResult
+})
+
+const sponsoredUserOperation: UserOperation<"0.7"> = {
+	callData: userOperation.callData,
+	callGasLimit: estimationResult.callGasLimit,
+	factory: userOperation.factory,
+	factoryData: userOperation.factoryData,
+	maxFeePerGas: userOperation.maxFeePerGas,
+	maxPriorityFeePerGas: userOperation.maxPriorityFeePerGas,
+	nonce: userOperation.nonce,
+	paymaster: sponsorUserOperationResult.paymaster,
+	paymasterData: sponsorUserOperationResult.paymasterData,
+	paymasterPostOpGasLimit: sponsorUserOperationResult.paymasterPostOpGasLimit,
+	paymasterVerificationGasLimit: sponsorUserOperationResult.paymasterVerificationGasLimit,
+	preVerificationGas: estimationResult.preVerificationGas,
+	sender: userOperation.sender,
+	signature: userOperation.signature,
+	verificationGasLimit: estimationResult.verificationGasLimit,
 }
 
 console.log("Received paymaster sponsor result:", sponsorUserOperationResult)
 
-const signature = await signUserOperationHashWithECDSA({
-	account: owner,
-	userOperation: sponsoredUserOperation,
-	chainId: sepolia.id,
-	entryPoint: ENTRYPOINT_ADDRESS_V07,
+const signature = await owner.signMessage({
+	message: {
+		raw: getUserOperationHash({
+			userOperation: sponsoredUserOperation,
+			chainId: sepolia.id,
+			entryPointAddress: entryPoint07Address,
+			entryPointVersion: "0.7",
+		})
+	}
 })
+
 sponsoredUserOperation.signature = signature
 
 console.log("Generated signature:", signature)
 
 const userOperationHash = await bundlerClient.sendUserOperation({
-	userOperation: sponsoredUserOperation,
+	...sponsoredUserOperation,
+	entryPointAddress: entryPoint07Address,
 })
 
 console.log("Received User Operation hash:", userOperationHash)
