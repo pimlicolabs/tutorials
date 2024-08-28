@@ -13,7 +13,7 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.3.1",
-    "permissionless": "0.0.0-v0-2.20240827T152549",
+    "permissionless": "0.0.0-v0-2.20240828T162812",
     "viem": "2.20.0"
   },
   "devDependencies": {

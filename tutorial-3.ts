@@ -77,7 +77,7 @@ const smartAccountClient = createSmartAccountClient({
 	client: publicClient,
 	account,
 	chain: sepolia,
-	transport: http(pimlicoUrl),
+	bundlerTransport: http(pimlicoUrl),
 	paymaster: {
 		async getPaymasterData(parameters) {
 			const gasEstimates = await pimlicoClient.estimateUserOperationGas({

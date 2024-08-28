@@ -5,7 +5,8 @@ import { Hex, createPublicClient, http } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
-import { createBundlerClient, createPaymasterClient, entryPoint07Address } from "viem/account-abstraction"
+import {  createBundlerClient, entryPoint07Address } from "viem/account-abstraction"
+import { createSmartAccountClient } from "permissionless"
 
 const apiKey = process.env.PIMLICO_API_KEY
 if (!apiKey) throw new Error("Missing PIMLICO_API_KEY")
@@ -49,26 +50,91 @@ const pimlicoClient = createPimlicoClient({
 	}
 })
 
-const smartAccountClient = createBundlerClient({
-	account,
-	chain: sepolia,
-	transport: http(pimlicoUrl),
-	paymaster: pimlicoClient,
-	userOperation: {
-		estimateFeesPerGas: async () => {
-			return (await pimlicoClient.getUserOperationGasPrice()).fast
-		},
-	}
-})
+{
+	const smartAccountClient = createSmartAccountClient({
+		account,
+		chain: sepolia,
+		bundlerTransport: http(pimlicoUrl),
+		paymaster: pimlicoClient,
+		userOperation: {
+			estimateFeesPerGas: async () => {
+				return (await pimlicoClient.getUserOperationGasPrice()).fast
+			},
+		}
+	})
 
-const userOpHash = await smartAccountClient.sendUserOperation({
-	calls: [{
+	const txHash = await smartAccountClient.sendTransaction({
 		to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
 		value: 0n,
 		data: "0x1234",
-	}]
-})
 
-const receipt = await smartAccountClient.waitForUserOperationReceipt({hash:userOpHash})
+	})
 
-console.log(`User operation included: https://sepolia.etherscan.io/tx/${receipt.receipt.transactionHash}`)
+	console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHash}`)
+
+	const txHashMultiple = await smartAccountClient.sendTransaction({
+		calls: [
+			{
+				to: "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+				value: 0n,
+				data: "0x1234",
+			},
+			{
+				to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+				value: 0n,
+				data: "0x1234",
+			}
+		],
+	})
+
+	console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHashMultiple}`)
+}
+
+{
+	const bundlerClient = createBundlerClient({
+		account,
+		chain: sepolia,
+		transport: http(pimlicoUrl),
+		paymaster: pimlicoClient,
+		userOperation: {
+			estimateFeesPerGas: async () => {
+				return (await pimlicoClient.getUserOperationGasPrice()).fast
+			},
+		}
+	})
+
+	const userOpHash = await bundlerClient.sendUserOperation({
+		calls: [{
+			to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+			value: 0n,
+			data: "0x1234",
+		}]
+	})
+
+	const receipt = await bundlerClient.waitForUserOperationReceipt({
+		hash: userOpHash,
+	})
+
+	console.log(`User operation included: https://sepolia.etherscan.io/tx/${receipt.receipt.transactionHash}`)
+
+	const txHashMultiple = await bundlerClient.sendUserOperation({
+		calls: [
+			{
+				to: "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+				value: 0n,
+				data: "0x1234",
+			},
+			{
+				to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
+				value: 0n,
+				data: "0x1234",
+			}
+		],
+	})
+
+	const receipt2 = await bundlerClient.getUserOperationReceipt({
+		hash: txHashMultiple,
+	})
+
+	console.log(`User operation included: https://sepolia.etherscan.io/tx/${receipt2.receipt.transactionHash}`)
+}
