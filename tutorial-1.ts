@@ -1,7 +1,7 @@
 import "dotenv/config"
 import { writeFileSync } from "fs"
 import { toSafeSmartAccount } from "permissionless/accounts"
-import { Hex, createPublicClient, http } from "viem"
+import { Hex, createPublicClient, getContract, http } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { sepolia } from "viem/chains"
 import { createPimlicoClient } from "permissionless/clients/pimlico"
@@ -70,7 +70,20 @@ const pimlicoClient = createPimlicoClient({
 
 	})
 
-	console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHash}`)
+	console.log(`User operation with single transaction included: https://sepolia.etherscan.io/tx/${txHash}`)
+
+	const contract = getContract({
+		address: "0x6D7A849791a8E869892f11E01c2A5f3b25a497B6",
+		abi: [{"inputs":[],"name":"getLastGreeter","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"greet","outputs":[],"stateMutability":"nonpayable","type":"function"}],
+		client: {
+			public: publicClient,
+			wallet: smartAccountClient,
+		}
+	})
+
+	const txHash2 = await contract.write.greet()
+
+	console.log(`User operation with contract call included: https://sepolia.etherscan.io/tx/${txHash2}`)
 
 	const txHashMultiple = await smartAccountClient.sendTransaction({
 		calls: [
@@ -80,14 +93,15 @@ const pimlicoClient = createPimlicoClient({
 				data: "0x1234",
 			},
 			{
-				to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-				value: 0n,
-				data: "0x1234",
+				abi: [{"inputs":[],"name":"getLastGreeter","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"greet","outputs":[],"stateMutability":"nonpayable","type":"function"}],
+				functionName: "greet",
+				args: [],
+				to: "0x6D7A849791a8E869892f11E01c2A5f3b25a497B6"
 			}
 		],
 	})
 
-	console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHashMultiple}`)
+	console.log(`User operation with multiple transactions included: https://sepolia.etherscan.io/tx/${txHashMultiple}`)
 }
 
 {
