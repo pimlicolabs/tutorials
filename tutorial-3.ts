@@ -1,120 +1,140 @@
-import "dotenv/config"
-import { writeFileSync } from "fs"
-import { createSmartAccountClient } from "permissionless"
-import { toSafeSmartAccount } from "permissionless/accounts"
-import { createPimlicoClient } from "permissionless/clients/pimlico"
-import { Hex, createPublicClient, encodeFunctionData, http, parseAbiItem } from "viem"
-import { entryPoint07Address } from "viem/account-abstraction"
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
-import { sepolia } from "viem/chains"
+import "dotenv/config";
+import { getRequiredPrefund } from "permissionless";
+import { toSimpleSmartAccount as toSafeSmartAccount } from "permissionless/accounts";
+import { createPimlicoClient } from "permissionless/clients/pimlico";
+import {
+	createPublicClient,
+	getAddress,
+	getContract,
+	Hex,
+	http,
+	maxUint256,
+	parseAbi,
+} from "viem";
+import {
+	createBundlerClient,
+	entryPoint07Address,
+	EntryPointVersion,
+} from "viem/account-abstraction";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import { writeFileSync } from "fs";
 
-const erc20PaymasterAddress = "0x000000000041F3aFe8892B48D88b6862efe0ec8d" as const
-const usdcAddress = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+const apiKey = process.env.PIMLICO_API_KEY;
+const pimlicoUrl = `https://api.pimlico.io/v2/${baseSepolia.id}/rpc?apikey=${apiKey}`;
+const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 const privateKey =
 	(process.env.PRIVATE_KEY as Hex) ??
 	(() => {
-		const pk = generatePrivateKey()
-		writeFileSync(".env", `PRIVATE_KEY=${pk}`)
-		return pk
-	})()
+		const pk = generatePrivateKey();
+		writeFileSync(".env", `PRIVATE_KEY=${pk}`);
+		return pk;
+	})();
 
 const publicClient = createPublicClient({
-	chain: sepolia,
-	transport: http("https://rpc.ankr.com/eth_sepolia"),
-})
-
-const apiKey = process.env.PIMLICO_API_KEY // REPLACE THIS
-const pimlicoUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
-
+	chain: baseSepolia,
+	transport: http("https://sepolia.base.org", {
+		onFetchResponse: async (res) => {
+			console.log(res);
+		},
+	}),
+});
 const pimlicoClient = createPimlicoClient({
 	transport: http(pimlicoUrl),
 	entryPoint: {
 		address: entryPoint07Address,
-		version: "0.7",
+		version: "0.7" as EntryPointVersion,
 	},
-})
+});
 
-const account = await toSafeSmartAccount( {
+const account = await toSafeSmartAccount({
 	client: publicClient,
 	owner: privateKeyToAccount(privateKey),
-	version: "1.4.1",
-	setupTransactions: [
-		{
-			to: usdcAddress,
-			value: 0n,
-			data: encodeFunctionData({
-				abi: [parseAbiItem("function approve(address spender, uint256 amount)")],
-				args: [
-					erc20PaymasterAddress,
-					0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn,
-				],
-			}),
-		},
-	],
-})
+});
 
-console.log(`Smart account address: https://sepolia.etherscan.io/address/${account.address}`)
+const bundlerClient = createBundlerClient({
+	account,
+	chain: baseSepolia,
+	transport: http(pimlicoUrl),
+	paymaster: pimlicoClient,
+	userOperation: {
+		estimateFeesPerGas: async () => {
+			return (await pimlicoClient.getUserOperationGasPrice()).fast;
+		},
+	},
+});
+
+console.log(
+	`Smart account address: https://sepolia.basescan.io/address/${account.address}`,
+);
 
 const senderUsdcBalance = await publicClient.readContract({
-	abi: [parseAbiItem("function balanceOf(address account) returns (uint256)")],
-	address: usdcAddress,
+	abi: parseAbi(["function balanceOf(address account) returns (uint256)"]),
+	address: usdc,
 	functionName: "balanceOf",
 	args: [account.address],
-})
+});
 
 if (senderUsdcBalance < 1_000_000n) {
 	throw new Error(
 		`insufficient USDC balance for counterfactual wallet address ${account.address}: ${
-			Number(senderUsdcBalance) / 1000000
+			Number(senderUsdcBalance) / 1_000_000
 		} USDC, required at least 1 USDC. Load up balance at https://faucet.circle.com/`,
-	)
+	);
 }
 
-console.log(`Smart account USDC balance: ${Number(senderUsdcBalance) / 1000000} USDC`)
+const tokenQuotes = await pimlicoClient.getTokenQuotes({
+	tokens: [usdc],
+	chainId: baseSepolia.id,
+});
 
-const smartAccountClient = createSmartAccountClient({
-	client: publicClient,
-	account,
-	chain: sepolia,
-	bundlerTransport: http(pimlicoUrl),
-	paymaster: {
-		async getPaymasterData(parameters) {
-			const gasEstimates = await pimlicoClient.estimateUserOperationGas({
-				...parameters,
-				paymaster: erc20PaymasterAddress,
-			})
-			return {
-				paymaster: erc20PaymasterAddress,
-				paymasterData: "0x" as Hex,
-				paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
-				paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n,
-			}
-		},
-		async getPaymasterStubData(parameters) {
-			const gasEstimates = await pimlicoClient.estimateUserOperationGas({
-				...parameters,
-				paymaster: erc20PaymasterAddress
-			})
-			return {
-				paymaster: erc20PaymasterAddress,
-				paymasterData: "0x" as Hex,
-				paymasterPostOpGasLimit: gasEstimates.paymasterPostOpGasLimit ?? 0n,
-				paymasterVerificationGasLimit: gasEstimates.paymasterVerificationGasLimit ?? 0n
-			}
-		}
+const { postOpGas, exchangeRate, paymaster, token } = tokenQuotes.quotes[0];
+
+const calls = [
+	{
+		to: getAddress(token),
+		abi: parseAbi(["function approve(address,uint)"]),
+		functionName: "approve",
+		args: [paymaster, maxUint256],
 	},
-	userOperation: {
-		estimateFeesPerGas: async () => {
-			return (await pimlicoClient.getUserOperationGasPrice()).fast
-		},
-	}
-})
+	{
+		to: getAddress("0xd8da6bf26964af9d7eed9e03e53415d37aa96045"),
+		data: "0x1234" as Hex,
+	},
+];
 
-const txHash = await smartAccountClient.sendTransaction({
-	to: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-	value: 0n,
-	data: "0x1234",
-})
+let userOperation = await bundlerClient.prepareUserOperation({
+	calls,
+});
 
-console.log(`User operation included: https://sepolia.etherscan.io/tx/${txHash}`)
+const paymasterContract = getContract({
+	address: paymaster,
+	abi: parseAbi([
+		"function getCostInToken(uint256 _actualGasCost, uint256 _postOpGas, uint256 _actualUserOpFeePerGas, uint256 _exchangeRate) public pure returns (uint256)",
+	]),
+	client: publicClient,
+});
+
+const maxCostInToken = await paymasterContract.read.getCostInToken([
+	getRequiredPrefund({ userOperation, entryPointVersion: "0.7" }),
+	postOpGas,
+	userOperation.maxFeePerGas,
+	exchangeRate,
+]);
+
+console.log(`maxCostInToken: ${maxCostInToken}`);
+
+const hash = await bundlerClient.sendUserOperation({
+	account,
+	paymasterContext: {
+		token: usdc,
+	},
+	calls,
+});
+
+const opReceipt = await bundlerClient.waitForUserOperationReceipt({
+	hash,
+});
+
+console.log(`transactionHash: ${opReceipt.receipt.transactionHash}`);
