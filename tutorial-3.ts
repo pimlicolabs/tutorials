@@ -34,11 +34,7 @@ const privateKey =
 
 const publicClient = createPublicClient({
 	chain: baseSepolia,
-	transport: http("https://sepolia.base.org", {
-		onFetchResponse: async (res) => {
-			console.log(res);
-		},
-	}),
+	transport: http("https://sepolia.base.org"),
 });
 const pimlicoClient = createPimlicoClient({
 	transport: http(pimlicoUrl),
