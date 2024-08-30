@@ -1,177 +1,136 @@
-import "dotenv/config"
-import { pimlicoActions } from "permissionless/actions/pimlico"
-import { getSenderAddress } from "permissionless/actions"
-import { Address, Hex, createClient, createPublicClient, encodeFunctionData, http } from "viem"
-import { bundlerActions, createPaymasterClient, entryPoint07Address, getUserOperationHash, UserOperation } from "viem/account-abstraction"
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
-import { sepolia } from "viem/chains"
+import "dotenv/config";
+import { getRequiredPrefund } from "permissionless";
+import { toSimpleSmartAccount as toSafeSmartAccount } from "permissionless/accounts";
+import { createPimlicoClient } from "permissionless/clients/pimlico";
+import {
+	createPublicClient,
+	getAddress,
+	getContract,
+	Hex,
+	http,
+	maxUint256,
+	parseAbi,
+} from "viem";
+import {
+	createBundlerClient,
+	entryPoint07Address,
+	EntryPointVersion,
+} from "viem/account-abstraction";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import { writeFileSync } from "fs";
 
-export const publicClient = createPublicClient({
-	transport: http("https://rpc.ankr.com/eth_sepolia"),
-	chain: sepolia,
-})
+const apiKey = process.env.PIMLICO_API_KEY;
+const pimlicoUrl = `https://api.pimlico.io/v2/${baseSepolia.id}/rpc?apikey=${apiKey}`;
+const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
-const apiKey = process.env.PIMLICO_API_KEY // REPLACE THIS
-const endpointUrl = `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`
+const privateKey =
+	(process.env.PRIVATE_KEY as Hex) ??
+	(() => {
+		const pk = generatePrivateKey();
+		writeFileSync(".env", `PRIVATE_KEY=${pk}`);
+		return pk;
+	})();
 
-const bundlerClient = createClient({
-	transport: http(endpointUrl),
-	chain: sepolia,
-})
-	.extend(bundlerActions)
-	.extend(pimlicoActions({
-		entryPoint: {
-			address: entryPoint07Address,
-			version: "0.7"
-		}
-	}))
+const publicClient = createPublicClient({
+	chain: baseSepolia,
+	transport: http("https://sepolia.base.org"),
+});
+const pimlicoClient = createPimlicoClient({
+	transport: http(pimlicoUrl),
+	entryPoint: {
+		address: entryPoint07Address,
+		version: "0.7" as EntryPointVersion,
+	},
+});
 
-const paymasterClient = createPaymasterClient({
-	transport: http(endpointUrl),
-})
+const account = await toSafeSmartAccount({
+	client: publicClient,
+	owner: privateKeyToAccount(privateKey),
+});
 
-const SIMPLE_ACCOUNT_FACTORY_ADDRESS = "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985"
-
-const ownerPrivateKey = generatePrivateKey()
-const owner = privateKeyToAccount(ownerPrivateKey)
-
-console.log("Generated wallet with private key:", ownerPrivateKey)
-
-const factory = SIMPLE_ACCOUNT_FACTORY_ADDRESS
-const factoryData = encodeFunctionData({
-	abi: [
-		{
-			inputs: [
-				{ name: "owner", type: "address" },
-				{ name: "salt", type: "uint256" },
-			],
-			name: "createAccount",
-			outputs: [{ name: "ret", type: "address" }],
-			stateMutability: "nonpayable",
-			type: "function",
+const bundlerClient = createBundlerClient({
+	account,
+	chain: baseSepolia,
+	transport: http(pimlicoUrl),
+	paymaster: pimlicoClient,
+	userOperation: {
+		estimateFeesPerGas: async () => {
+			return (await pimlicoClient.getUserOperationGasPrice()).fast;
 		},
-	],
-	args: [owner.address, 0n],
-})
+	},
+});
 
-console.log("Generated factoryData:", factoryData)
+console.log(
+	`Smart account address: https://sepolia.basescan.io/address/${account.address}`,
+);
 
-const senderAddress = await getSenderAddress(publicClient, {
-	factory,
-	factoryData,
-	entryPointAddress: entryPoint07Address,
-})
-console.log("Calculated sender address:", senderAddress)
+const senderUsdcBalance = await publicClient.readContract({
+	abi: parseAbi(["function balanceOf(address account) returns (uint256)"]),
+	address: usdc,
+	functionName: "balanceOf",
+	args: [account.address],
+});
 
-const to = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" // vitalik
-const value = 0n
-const data = "0x68656c6c6f" // "hello" encoded to utf-8 bytes
-
-const callData = encodeFunctionData({
-	abi: [
-		{
-			inputs: [
-				{ name: "dest", type: "address" },
-				{ name: "value", type: "uint256" },
-				{ name: "func", type: "bytes" },
-			],
-			name: "execute",
-			outputs: [],
-			stateMutability: "nonpayable",
-			type: "function",
-		},
-	],
-	args: [to, value, data],
-})
-
-console.log("Generated callData:", callData)
-
-const gasPrice = await bundlerClient.getUserOperationGasPrice()
-
-const userOperation = {
-	sender: senderAddress,
-	nonce: 0n,
-	factory: factory as Address,
-	factoryData,
-	callData,
-	maxFeePerGas: gasPrice.fast.maxFeePerGas,
-	maxPriorityFeePerGas: gasPrice.fast.maxPriorityFeePerGas,
-	callGasLimit: 0n,
-	preVerificationGas: 0n,
-	verificationGasLimit: 0n,
-	// dummy signature, needs to be there so the SimpleAccount doesn't immediately revert because of invalid signature length
-	signature:
-		"0xa15569dd8f8324dbeabf8073fdec36d4b754f53ce5901e283c6de79af177dc94557fa3c9922cd7af2a96ca94402d35c39f266925ee6407aeb32b31d76978d4ba1c" as Hex,
-		
+if (senderUsdcBalance < 1_000_000n) {
+	throw new Error(
+		`insufficient USDC balance for counterfactual wallet address ${account.address}: ${
+			Number(senderUsdcBalance) / 1_000_000
+		} USDC, required at least 1 USDC. Load up balance at https://faucet.circle.com/`,
+	);
 }
 
-const estimationResult = await bundlerClient.estimateUserOperationGas({
-	...userOperation,
-	entryPointAddress: entryPoint07Address,
-})
+const tokenQuotes = await pimlicoClient.getTokenQuotes({
+	tokens: [usdc],
+	chainId: baseSepolia.id,
+});
 
-userOperation.callGasLimit = estimationResult.callGasLimit
-userOperation.preVerificationGas = estimationResult.preVerificationGas
-userOperation.verificationGasLimit = estimationResult.verificationGasLimit
+const { postOpGas, exchangeRate, paymaster, token } = tokenQuotes.quotes[0];
 
+const calls = [
+	{
+		to: getAddress(token),
+		abi: parseAbi(["function approve(address,uint)"]),
+		functionName: "approve",
+		args: [paymaster, maxUint256],
+	},
+	{
+		to: getAddress("0xd8da6bf26964af9d7eed9e03e53415d37aa96045"),
+		data: "0x1234" as Hex,
+	},
+];
 
-const sponsorUserOperationResult = await paymasterClient.getPaymasterData({
-	...userOperation,
-	chainId: sepolia.id,
-	entryPointAddress: entryPoint07Address,
-})
+let userOperation = await bundlerClient.prepareUserOperation({
+	calls,
+});
 
-console.log({
-	sponsorUserOperationResult
-})
+const paymasterContract = getContract({
+	address: paymaster,
+	abi: parseAbi([
+		"function getCostInToken(uint256 _actualGasCost, uint256 _postOpGas, uint256 _actualUserOpFeePerGas, uint256 _exchangeRate) public pure returns (uint256)",
+	]),
+	client: publicClient,
+});
 
-const sponsoredUserOperation: UserOperation<"0.7"> = {
-	callData: userOperation.callData,
-	callGasLimit: estimationResult.callGasLimit,
-	factory: userOperation.factory,
-	factoryData: userOperation.factoryData,
-	maxFeePerGas: userOperation.maxFeePerGas,
-	maxPriorityFeePerGas: userOperation.maxPriorityFeePerGas,
-	nonce: userOperation.nonce,
-	paymaster: sponsorUserOperationResult.paymaster,
-	paymasterData: sponsorUserOperationResult.paymasterData,
-	paymasterPostOpGasLimit: sponsorUserOperationResult.paymasterPostOpGasLimit,
-	paymasterVerificationGasLimit: sponsorUserOperationResult.paymasterVerificationGasLimit,
-	preVerificationGas: estimationResult.preVerificationGas,
-	sender: userOperation.sender,
-	signature: userOperation.signature,
-	verificationGasLimit: estimationResult.verificationGasLimit,
-}
+const maxCostInToken = await paymasterContract.read.getCostInToken([
+	getRequiredPrefund({ userOperation, entryPointVersion: "0.7" }),
+	postOpGas,
+	userOperation.maxFeePerGas,
+	exchangeRate,
+]);
 
-console.log("Received paymaster sponsor result:", sponsorUserOperationResult)
+console.log(`maxCostInToken: ${maxCostInToken}`);
 
-const signature = await owner.signMessage({
-	message: {
-		raw: getUserOperationHash({
-			userOperation: sponsoredUserOperation,
-			chainId: sepolia.id,
-			entryPointAddress: entryPoint07Address,
-			entryPointVersion: "0.7",
-		})
-	}
-})
+const hash = await bundlerClient.sendUserOperation({
+	account,
+	paymasterContext: {
+		token: usdc,
+	},
+	calls,
+});
 
-sponsoredUserOperation.signature = signature
+const opReceipt = await bundlerClient.waitForUserOperationReceipt({
+	hash,
+});
 
-console.log("Generated signature:", signature)
-
-const userOperationHash = await bundlerClient.sendUserOperation({
-	...sponsoredUserOperation,
-	entryPointAddress: entryPoint07Address,
-})
-
-console.log("Received User Operation hash:", userOperationHash)
-
-// let's also wait for the userOperation to be included, by continually querying for the receipts
-console.log("Querying for receipts...")
-const receipt = await bundlerClient.waitForUserOperationReceipt({
-	hash: userOperationHash,
-})
-const txHash = receipt.receipt.transactionHash
-
-console.log(`UserOperation included: https://sepolia.etherscan.io/tx/${txHash}`)
+console.log(`transactionHash: ${opReceipt.receipt.transactionHash}`);
