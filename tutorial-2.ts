@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getRequiredPrefund } from "permissionless";
-import { toSimpleSmartAccount as toSafeSmartAccount } from "permissionless/accounts";
+import { toSimpleSmartAccount } from "permissionless/accounts";
 import { createPimlicoClient } from "permissionless/clients/pimlico";
 import {
 	createPublicClient,
@@ -44,7 +44,7 @@ const pimlicoClient = createPimlicoClient({
 	},
 });
 
-const account = await toSafeSmartAccount({
+const account = await toSimpleSmartAccount({
 	client: publicClient,
 	owner: privateKeyToAccount(privateKey),
 });
