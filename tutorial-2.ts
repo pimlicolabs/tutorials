@@ -1,18 +1,16 @@
 import "dotenv/config";
-import { getRequiredPrefund } from "permissionless";
+import { createSmartAccountClient } from "permissionless";
 import { toSimpleSmartAccount } from "permissionless/accounts";
 import { createPimlicoClient } from "permissionless/clients/pimlico";
 import {
 	createPublicClient,
 	getAddress,
-	getContract,
 	Hex,
 	http,
 	maxUint256,
 	parseAbi,
 } from "viem";
 import {
-	createBundlerClient,
 	entryPoint07Address,
 	EntryPointVersion,
 } from "viem/account-abstraction";
@@ -20,9 +18,11 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { writeFileSync } from "fs";
 
+const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const paymaster = "0x0000000000000039cd5e8ae05257ce51c473ddd1";
+
 const apiKey = process.env.PIMLICO_API_KEY;
 const pimlicoUrl = `https://api.pimlico.io/v2/${baseSepolia.id}/rpc?apikey=${apiKey}`;
-const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 const privateKey =
 	(process.env.PRIVATE_KEY as Hex) ??
@@ -36,7 +36,9 @@ const publicClient = createPublicClient({
 	chain: baseSepolia,
 	transport: http("https://sepolia.base.org"),
 });
+
 const pimlicoClient = createPimlicoClient({
+	chain: baseSepolia,
 	transport: http(pimlicoUrl),
 	entryPoint: {
 		address: entryPoint07Address,
@@ -49,10 +51,10 @@ const account = await toSimpleSmartAccount({
 	owner: privateKeyToAccount(privateKey),
 });
 
-const bundlerClient = createBundlerClient({
+const smartAccountClient = createSmartAccountClient({
 	account,
 	chain: baseSepolia,
-	transport: http(pimlicoUrl),
+	bundlerTransport: http(pimlicoUrl),
 	paymaster: pimlicoClient,
 	userOperation: {
 		estimateFeesPerGas: async () => {
@@ -80,56 +82,22 @@ if (senderUsdcBalance < 1_000_000n) {
 	);
 }
 
-const tokenQuotes = await pimlicoClient.getTokenQuotes({
-	tokens: [usdc],
-});
-
-const { postOpGas, exchangeRate, paymaster, token } = tokenQuotes[0];
-
-const calls = [
-	{
-		to: getAddress(token),
-		abi: parseAbi(["function approve(address,uint)"]),
-		functionName: "approve",
-		args: [paymaster, maxUint256],
-	},
-	{
-		to: getAddress("0xd8da6bf26964af9d7eed9e03e53415d37aa96045"),
-		data: "0x1234" as Hex,
-	},
-];
-
-let userOperation = await bundlerClient.prepareUserOperation({
-	calls,
-});
-
-const paymasterContract = getContract({
-	address: paymaster,
-	abi: parseAbi([
-		"function getCostInToken(uint256 _actualGasCost, uint256 _postOpGas, uint256 _actualUserOpFeePerGas, uint256 _exchangeRate) public pure returns (uint256)",
-	]),
-	client: publicClient,
-});
-
-const maxCostInToken = await paymasterContract.read.getCostInToken([
-	getRequiredPrefund({ userOperation, entryPointVersion: "0.7" }),
-	postOpGas,
-	userOperation.maxFeePerGas,
-	exchangeRate,
-]);
-
-console.log(`maxCostInToken: ${maxCostInToken}`);
-
-const hash = await bundlerClient.sendUserOperation({
-	account,
+let txHash = await smartAccountClient.sendTransaction({
+	calls: [
+		{
+			to: getAddress(usdc),
+			abi: parseAbi(["function approve(address,uint)"]),
+			functionName: "approve",
+			args: [paymaster, maxUint256],
+		},
+		{
+			to: getAddress("0xd8da6bf26964af9d7eed9e03e53415d37aa96045"),
+			data: "0x1234" as Hex,
+		},
+	],
 	paymasterContext: {
 		token: usdc,
 	},
-	calls,
 });
 
-const opReceipt = await bundlerClient.waitForUserOperationReceipt({
-	hash,
-});
-
-console.log(`transactionHash: ${opReceipt.receipt.transactionHash}`);
+console.log(`transactionHash: ${txHash}`);
