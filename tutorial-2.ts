@@ -82,10 +82,9 @@ if (senderUsdcBalance < 1_000_000n) {
 
 const tokenQuotes = await pimlicoClient.getTokenQuotes({
 	tokens: [usdc],
-	chainId: baseSepolia.id,
 });
 
-const { postOpGas, exchangeRate, paymaster, token } = tokenQuotes.quotes[0];
+const { postOpGas, exchangeRate, paymaster, token } = tokenQuotes[0];
 
 const calls = [
 	{
