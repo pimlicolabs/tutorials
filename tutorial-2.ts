@@ -65,7 +65,7 @@ const smartAccountClient = createSmartAccountClient({
 });
 
 console.log(
-	`Smart account address: https://sepolia.basescan.io/address/${account.address}`,
+	`Smart account address: https://sepolia.basescan.org/address/${account.address}`,
 );
 
 const senderUsdcBalance = await publicClient.readContract({
